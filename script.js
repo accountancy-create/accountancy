@@ -5,9 +5,8 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  onAuthStateChanged,
   signOut,
-  updateProfile
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
 
 import {
@@ -15,12 +14,12 @@ import {
   collection,
   addDoc,
   getDocs,
-  deleteDoc,
   doc,
+  deleteDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
 
-// FIREBASE CONFIGURATION
+// FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyByMIpKF3AAldzu_6Cw8rDH41NgVo44-Uo",
   authDomain: "accountancy-804b2.firebaseapp.com",
@@ -35,15 +34,17 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// APP STATE
+const $ = id => document.getElementById(id);
+
 let currentUser = null;
 let clients = [];
-let transactions = [];
-let selectedClientId = null;
+let activeClient = null;
+let savingClient = false;
+let savingTransaction = false;
+let isRegistering = false;
+let isLoggingIn = false;
 
 // HELPERS
-const $ = (id) => document.getElementById(id);
-
 function usernameToEmail(username) {
   return username.trim().toLowerCase() + "@users.buildledger.invalid";
 }
@@ -54,9 +55,8 @@ function userCollection(name) {
 }
 
 function money(value) {
-  return Number(value || 0).toLocaleString("en-IN", {
-    style: "currency",
-    currency: "INR",
+  return "₹" + Number(value || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 }
@@ -66,118 +66,162 @@ function message(id, text) {
   if (element) element.textContent = text;
 }
 
-function showPage(pageId, title) {
-  ["dashboardPage", "clientsPage", "accountPage"].forEach(id => {
-    $(id).classList.add("hidden");
-  });
-
-  $(pageId).classList.remove("hidden");
-  $("pageTitle").textContent = title;
+function hideElement(id, hide) {
+  const element = $(id);
+  if (element) element.classList.toggle("hidden", hide);
 }
 
-function safeText(value) {
-  return String(value ?? "");
+function showPage(page) {
+  ["dashboardPage", "clientsPage", "accountPage"].forEach(id => {
+    hideElement(id, id !== page);
+  });
+
+  const titles = {
+    dashboardPage: "Dashboard",
+    clientsPage: "Clients",
+    accountPage: "Client account"
+  };
+
+  if ($("pageTitle")) {
+    $("pageTitle").textContent = titles[page] || "BuildLedger";
+  }
+}
+
+// APP STATUS MESSAGE
+function showAppStatus(text, isError = false) {
+  let status = $("appStatus");
+
+  if (!status) {
+    status = document.createElement("p");
+    status.id = "appStatus";
+    status.className = "message";
+    status.setAttribute("role", "status");
+
+    const main = document.querySelector(".main-area");
+    if (main) {
+      main.insertBefore(status, main.firstChild);
+    }
+  }
+
+  status.textContent = text;
+  status.style.color = isError ? "#b91c1c" : "#2563eb";
+  status.classList.remove("hidden");
 }
 
 // AUTH SWITCH
-let showingRegister = false;
+function switchAuth() {
+  const login = $("loginForm");
+  const register = $("registerForm");
 
-$("switchAuthBtn").addEventListener("click", () => {
-  showingRegister = !showingRegister;
+  if (!login || !register) return;
 
-  $("loginForm").classList.toggle("hidden", showingRegister);
-  $("registerForm").classList.toggle("hidden", !showingRegister);
+  const registering = register.classList.contains("hidden");
 
-  $("authTitle").textContent = showingRegister
-    ? "Create account"
-    : "Welcome back";
+  login.classList.toggle("hidden", registering);
+  register.classList.toggle("hidden", !registering);
 
-  $("authSubtitle").textContent = showingRegister
-    ? "Create your BuildLedger account."
-    : "Sign in to manage your accounts.";
+  if ($("authTitle")) {
+    $("authTitle").textContent = registering
+      ? "Create account"
+      : "Welcome back";
+  }
 
-  $("authSwitchText").textContent = showingRegister
-    ? "Already have an account?"
-    : "Don't have an account?";
+  if ($("authSubtitle")) {
+    $("authSubtitle").textContent = registering
+      ? "Register to use BuildLedger"
+      : "Sign in to your account";
+  }
 
-  $("switchAuthBtn").textContent = showingRegister
-    ? "Sign in"
-    : "Create account";
-});
+  if ($("authSwitchText")) {
+    $("authSwitchText").textContent = registering
+      ? "Already have an account?"
+      : "Don't have an account?";
+  }
+
+  if ($("switchAuthBtn")) {
+    $("switchAuthBtn").textContent = registering
+      ? "Sign in"
+      : "Create account";
+  }
+
+  message("loginMessage", "");
+  message("registerMessage", "");
+}
+
+$("switchAuthBtn")?.addEventListener("click", switchAuth);
 
 // REGISTER
-$("registerForm").addEventListener("submit", async (event) => {
+$("registerForm")?.addEventListener("submit", async event => {
   event.preventDefault();
+
+  if (isRegistering) return;
+  isRegistering = true;
+
+  const form = $("registerForm");
+  const button = form.querySelector('button[type="submit"]');
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Creating account...";
+  }
 
   const username = $("registerUsername").value.trim();
   const password = $("registerPassword").value;
   const confirm = $("confirmPassword").value;
 
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
-    message("registerMessage", "Use 3–20 letters, numbers or underscores.");
-    return;
-  }
-
-  if (password.length < 8) {
-    message("registerMessage", "Password must be at least 8 characters.");
-    return;
-  }
-
-  if (password !== confirm) {
-    message("registerMessage", "Passwords do not match.");
-    return;
-  }
-
   try {
-    message("registerMessage", "Creating account...");
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+      throw new Error("Username must be 3–20 characters and use only letters, numbers or underscores.");
+    }
 
-    const credential = await createUserWithEmailAndPassword(
+    if (password.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
+    }
+
+    if (password !== confirm) {
+      throw new Error("Passwords do not match.");
+    }
+
+    await createUserWithEmailAndPassword(
       auth,
       usernameToEmail(username),
       password
     );
 
-    await updateProfile(credential.user, {
-      displayName: username
-    });
-
-    await addDoc(
-      collection(db, "users", credential.user.uid, "profile"),
-      {
-        username: username,
-        createdAt: serverTimestamp()
-      }
-    );
-
-    $("registerForm").reset();
     message("registerMessage", "Account created successfully!");
 
   } catch (error) {
-    console.error(error);
+    console.error("Registration error:", error);
+    message("registerMessage", error.message);
 
-    message(
-      "registerMessage",
-      error.code === "auth/email-already-in-use"
-        ? "That username is already taken."
-        : error.message
-    );
+  } finally {
+    isRegistering = false;
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Create account →";
+    }
   }
 });
 
 // LOGIN
-$("loginForm").addEventListener("submit", async (event) => {
+$("loginForm")?.addEventListener("submit", async event => {
   event.preventDefault();
 
-  const username = $("loginUsername").value.trim();
-  const password = $("loginPassword").value;
+  if (isLoggingIn) return;
+  isLoggingIn = true;
 
-  if (!username || !password) {
-    message("loginMessage", "Enter your username and password.");
-    return;
+  const form = $("loginForm");
+  const button = form.querySelector('button[type="submit"]');
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Signing in...";
   }
 
   try {
-    message("loginMessage", "Signing in...");
+    const username = $("loginUsername").value.trim();
+    const password = $("loginPassword").value;
 
     await signInWithEmailAndPassword(
       auth,
@@ -185,164 +229,183 @@ $("loginForm").addEventListener("submit", async (event) => {
       password
     );
 
-    $("loginForm").reset();
     message("loginMessage", "");
 
   } catch (error) {
-    console.error(error);
-    message("loginMessage", "Incorrect username or password.");
+    console.error("Login error:", error);
+    message("loginMessage", "Login failed: " + error.message);
+
+  } finally {
+    isLoggingIn = false;
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Sign in →";
+    }
   }
 });
 
 // LOGOUT
-$("logoutBtn").addEventListener("click", async () => {
-  await signOut(auth);
+$("logoutBtn")?.addEventListener("click", async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    alert("Sign out failed: " + error.message);
+  }
 });
 
 // AUTH STATE
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, async user => {
   currentUser = user;
 
-  if (user) {
-    $("loginScreen").classList.add("hidden");
-    $("appScreen").classList.remove("hidden");
+  hideElement("loginScreen", !!user);
+  hideElement("appScreen", !user);
 
-    $("currentUsername").textContent =
-      user.displayName || "User";
-
-    try {
-      await loadClients();
-      await loadTransactions();
-      showPage("dashboardPage", "Dashboard");
-      updateDashboard();
-
-    } catch (error) {
-      console.error(error);
-      alert("Could not load your data. Check your Firestore settings.");
-    }
-
-  } else {
-    $("appScreen").classList.add("hidden");
-    $("loginScreen").classList.remove("hidden");
-
+  if (!user) {
     clients = [];
-    transactions = [];
-    selectedClientId = null;
+    activeClient = null;
+    return;
+  }
+
+  if ($("currentUsername")) {
+    $("currentUsername").textContent =
+      user.email.split("@")[0];
+  }
+
+  try {
+    await loadClients();
+    showPage("dashboardPage");
+    updateDashboard();
+  } catch (error) {
+    console.error("Account loading error:", error);
+    showAppStatus("Could not load your data: " + error.message, true);
   }
 });
 
 // NAVIGATION
-$("dashboardNav").addEventListener("click", () => {
-  showPage("dashboardPage", "Dashboard");
-  setActiveNav("dashboardNav");
+$("dashboardNav")?.addEventListener("click", () => {
+  showPage("dashboardPage");
   updateDashboard();
 });
 
-$("clientsNav").addEventListener("click", () => {
-  showPage("clientsPage", "Clients");
-  setActiveNav("clientsNav");
+$("clientsNav")?.addEventListener("click", () => {
+  showPage("clientsPage");
   renderClients();
 });
 
-$("viewAllClients").addEventListener("click", () => {
-  showPage("clientsPage", "Clients");
-  setActiveNav("clientsNav");
+$("viewAllClients")?.addEventListener("click", () => {
+  showPage("clientsPage");
   renderClients();
 });
 
-$("backToClients").addEventListener("click", () => {
-  showPage("clientsPage", "Clients");
-  setActiveNav("clientsNav");
-  renderClients();
-});
-
-function setActiveNav(id) {
-  document.querySelectorAll(".nav-item").forEach(button => {
-    button.classList.remove("active");
-  });
-
-  $(id).classList.add("active");
-}
-
-// ADD CLIENT DIALOG
+// CLIENT DIALOG
 function openClientDialog() {
-  $("clientForm").reset();
+  if (!currentUser) {
+    showAppStatus("Please sign in before adding a client.", true);
+    return;
+  }
+
+  if (!$("clientDialog")) return;
+
+  $("clientForm")?.reset();
   message("clientMessage", "");
-  $("clientDialog").showModal();
+
+  if (!$("clientDialog").open) {
+    $("clientDialog").showModal();
+  }
 }
 
-$("addClientBtn").addEventListener("click", openClientDialog);
-$("addClientTop").addEventListener("click", openClientDialog);
+$("addClientBtn")?.addEventListener("click", openClientDialog);
+$("addClientTop")?.addEventListener("click", openClientDialog);
 
-$("cancelDialog").addEventListener("click", () => {
-  $("clientDialog").close();
+$("cancelDialog")?.addEventListener("click", () => {
+  if ($("clientDialog")?.open) {
+    $("clientDialog").close();
+  }
 });
 
-// SAVE CLIENT - DUPLICATE SAVE FIX
-let savingClient = false;
-
-$("clientForm").addEventListener("submit", async (event) => {
+// SAVE CLIENT
+$("clientForm")?.addEventListener("submit", async event => {
   event.preventDefault();
 
-  if (savingClient) return;
+  if (savingClient || !currentUser) return;
 
   const name = $("clientName").value.trim();
   const phone = $("clientPhone").value.trim();
   const project = $("clientProject").value.trim();
 
-  if (!currentUser) {
-    message("clientMessage", "Please sign in first.");
-    return;
-  }
-
   if (!name) {
-    message("clientMessage", "Enter the client name.");
+    message("clientMessage", "Enter a client name.");
     return;
   }
 
-  const saveButton = $("clientForm").querySelector(
-    'button[type="submit"]'
-  );
+  const form = $("clientForm");
+  const button = form.querySelector('button[type="submit"]');
 
   savingClient = true;
-  saveButton.disabled = true;
-  saveButton.textContent = "Saving...";
 
-  // Close popup immediately
-  $("clientDialog").close();
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving...";
+  }
+
+  // Close the popup immediately.
+  // Keep the entered values in case saving fails.
+  if ($("clientDialog")?.open) {
+    $("clientDialog").close();
+  }
+
+  showAppStatus("Saving client...");
 
   try {
-    await addDoc(userCollection("clients"), {
+    const result = await addDoc(userCollection("clients"), {
       name,
       phone,
       project,
       createdAt: serverTimestamp()
     });
 
-    $("clientForm").reset();
+    clients.push({
+      id: result.id,
+      name,
+      phone,
+      project,
+      income: 0,
+      expenses: 0
+    });
 
-    await loadClients();
+    form.reset();
+
+    renderClients();
     updateDashboard();
 
+    showAppStatus("Client saved successfully.");
+
   } catch (error) {
-    console.error("Client save error:", error);
+    console.error("Client save failed:", error);
 
-    $("clientDialog").showModal();
+    // Restore the popup and entered information.
+    if ($("clientDialog") && !$("clientDialog").open) {
+      $("clientDialog").showModal();
+    }
 
-    message(
-      "clientMessage",
-      "Save failed: " + error.message
-    );
+    message("clientMessage", "Save failed: " + error.message);
+    showAppStatus("Client was not saved. Check the error in the popup.", true);
 
   } finally {
     savingClient = false;
-    saveButton.disabled = false;
-    saveButton.textContent = "Save client";
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Save client";
+    }
   }
 });
 
 // LOAD CLIENTS
 async function loadClients() {
+  if (!currentUser) return;
+
   const snapshot = await getDocs(userCollection("clients"));
 
   clients = snapshot.docs.map(item => ({
@@ -350,152 +413,160 @@ async function loadClients() {
     ...item.data()
   }));
 
-  clients.sort((a, b) =>
-    safeText(a.name).localeCompare(safeText(b.name))
-  );
+  // Load transaction totals for all clients.
+  await Promise.all(clients.map(async client => {
+    const ref = collection(
+      db,
+      "users",
+      currentUser.uid,
+      "clients",
+      client.id,
+      "transactions"
+    );
+
+    const transactions = await getDocs(ref);
+
+    let income = 0;
+    let expenses = 0;
+
+    transactions.forEach(item => {
+      const data = item.data();
+
+      if (data.type === "income") {
+        income += Number(data.amount || 0);
+      } else {
+        expenses += Number(data.amount || 0);
+      }
+    });
+
+    client.income = income;
+    client.expenses = expenses;
+  }));
 
   renderClients();
+  updateDashboard();
 }
 
 // RENDER CLIENTS
 function renderClients() {
-  const allClients = $("allClients");
-  const recentClients = $("recentClients");
+  const container = $("allClients");
+  if (!container) return;
 
-  allClients.innerHTML = "";
-  recentClients.innerHTML = "";
+  container.innerHTML = "";
 
-  const search = $("clientSearch").value.toLowerCase();
+  const search = $("clientSearch")?.value.trim().toLowerCase() || "";
 
   const filtered = clients.filter(client =>
-    safeText(client.name).toLowerCase().includes(search) ||
-    safeText(client.phone).toLowerCase().includes(search) ||
-    safeText(client.project).toLowerCase().includes(search)
+    (client.name || "").toLowerCase().includes(search) ||
+    (client.phone || "").toLowerCase().includes(search) ||
+    (client.project || "").toLowerCase().includes(search)
   );
 
-  $("clientCount").textContent =
-    `${filtered.length} client(s)`;
+  if ($("clientCount")) {
+    $("clientCount").textContent = filtered.length + " client(s)";
+  }
 
-  $("clientsEmpty").classList.toggle(
-    "hidden",
-    filtered.length > 0
-  );
-
-  $("dashboardEmpty").classList.toggle(
-    "hidden",
-    clients.length > 0
-  );
+  hideElement("clientsEmpty", filtered.length !== 0);
 
   filtered.forEach(client => {
-    const card = document.createElement("article");
+    const card = document.createElement("div");
     card.className = "client-card";
 
     const heading = document.createElement("h3");
     heading.textContent = client.name || "Unnamed client";
 
-    const phone = document.createElement("p");
-    phone.className = "muted";
-    phone.textContent = client.phone || "No phone number";
+    const details = document.createElement("p");
+    details.textContent =
+      (client.phone || "No phone") + " • " +
+      (client.project || "No project");
 
-    const project = document.createElement("p");
-    project.className = "muted";
-    project.textContent = client.project || "No project";
+    const balance = document.createElement("p");
+    balance.textContent = "Balance: " + money(
+      Number(client.income || 0) -
+      Number(client.expenses || 0)
+    );
 
-    card.append(heading, phone, project);
+    card.append(heading, details, balance);
+    card.addEventListener("click", () => openClient(client));
 
-    card.addEventListener("click", () => {
-      openClient(client.id);
-    });
-
-    allClients.appendChild(card);
-  });
-
-  clients.slice(0, 3).forEach(client => {
-    const card = document.createElement("article");
-    card.className = "client-card";
-
-    const heading = document.createElement("h3");
-    heading.textContent = client.name || "Unnamed client";
-
-    const detail = document.createElement("p");
-    detail.className = "muted";
-    detail.textContent = client.project || "Client account";
-
-    card.append(heading, detail);
-
-    card.addEventListener("click", () => {
-      openClient(client.id);
-    });
-
-    recentClients.appendChild(card);
+    container.appendChild(card);
   });
 }
 
-$("clientSearch").addEventListener("input", renderClients);
+$("clientSearch")?.addEventListener("input", renderClients);
 
-// OPEN CLIENT ACCOUNT
-async function openClient(clientId) {
-  selectedClientId = clientId;
-
-  const client = clients.find(item => item.id === clientId);
-  if (!client) return;
-
-  $("accountClientName").textContent = client.name || "Client";
-
-  $("accountClientDetails").textContent =
-    [client.phone, client.project].filter(Boolean).join(" • ");
-
-  showPage("accountPage", "Client account");
-
-  await loadTransactions();
-  renderTransactions();
-  updateClientSummary();
-}
-
-// DELETE CLIENT
-$("deleteClientBtn").addEventListener("click", async () => {
-  if (!selectedClientId) return;
-
-  const confirmed = confirm(
-    "Delete this client and all their transactions?"
+// DASHBOARD
+function updateDashboard() {
+  const totalIncome = clients.reduce(
+    (sum, client) => sum + Number(client.income || 0), 0
   );
 
-  if (!confirmed) return;
+  const totalExpenses = clients.reduce(
+    (sum, client) => sum + Number(client.expenses || 0), 0
+  );
 
-  try {
-    const clientTransactions = transactions.filter(
-      item => item.clientId === selectedClientId
-    );
-
-    for (const transaction of clientTransactions) {
-      await deleteDoc(
-        doc(db, "users", currentUser.uid, "transactions", transaction.id)
-      );
-    }
-
-    await deleteDoc(
-      doc(db, "users", currentUser.uid, "clients", selectedClientId)
-    );
-
-    selectedClientId = null;
-
-    await loadClients();
-    await loadTransactions();
-
-    showPage("clientsPage", "Clients");
-    updateDashboard();
-
-  } catch (error) {
-    console.error(error);
-    alert("Could not delete client.");
+  if ($("totalClients")) {
+    $("totalClients").textContent = clients.length;
   }
+
+  if ($("totalIncome")) {
+    $("totalIncome").textContent = money(totalIncome);
+  }
+
+  if ($("totalExpenses")) {
+    $("totalExpenses").textContent = money(totalExpenses);
+  }
+
+  if ($("netBalance")) {
+    $("netBalance").textContent =
+      money(totalIncome - totalExpenses);
+  }
+
+  if ($("recentClients")) {
+    $("recentClients").innerHTML = "";
+
+    clients.slice(-5).reverse().forEach(client => {
+      const item = document.createElement("p");
+      item.textContent = client.name;
+      item.className = "client-card";
+      item.addEventListener("click", () => openClient(client));
+      $("recentClients").appendChild(item);
+    });
+  }
+
+  hideElement("dashboardEmpty", clients.length !== 0);
+}
+
+// OPEN CLIENT
+async function openClient(client) {
+  activeClient = client;
+
+  showPage("accountPage");
+
+  if ($("accountClientName")) {
+    $("accountClientName").textContent = client.name || "Client";
+  }
+
+  if ($("accountClientDetails")) {
+    $("accountClientDetails").textContent =
+      (client.phone || "") + " " + (client.project || "");
+  }
+
+  message("transactionMessage", "");
+  await loadTransactions();
+}
+
+// BACK TO CLIENTS
+$("backToClients")?.addEventListener("click", () => {
+  showPage("clientsPage");
+  renderClients();
 });
 
-// ADD TRANSACTION
-$("transactionForm").addEventListener("submit", async (event) => {
+// SAVE TRANSACTION
+$("transactionForm")?.addEventListener("submit", async event => {
   event.preventDefault();
 
-  if (!selectedClientId) return;
+  if (savingTransaction || !currentUser || !activeClient) return;
 
   const type = $("transactionType").value;
   const date = $("transactionDate").value;
@@ -503,217 +574,265 @@ $("transactionForm").addEventListener("submit", async (event) => {
   const amount = Number($("transactionAmount").value);
 
   if (!date || !description || !Number.isFinite(amount) || amount <= 0) {
-    message("transactionMessage", "Enter valid transaction details.");
+    message("transactionMessage", "Enter a date, description and valid amount.");
     return;
   }
 
-  try {
-    await addDoc(userCollection("transactions"), {
-      clientId: selectedClientId,
-      type,
-      date,
-      description,
-      amount,
-      createdAt: serverTimestamp()
-    });
+  savingTransaction = true;
 
-    $("transactionForm").reset();
-    message("transactionMessage", "Transaction saved!");
+  const form = $("transactionForm");
+  const button = form.querySelector('button[type="submit"]');
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving...";
+  }
+
+  try {
+    await addDoc(
+      collection(
+        db,
+        "users",
+        currentUser.uid,
+        "clients",
+        activeClient.id,
+        "transactions"
+      ),
+      {
+        type,
+        date,
+        description,
+        amount,
+        createdAt: serverTimestamp()
+      }
+    );
+
+    form.reset();
+    message("transactionMessage", "Transaction saved successfully!");
 
     await loadTransactions();
-    renderTransactions();
-    updateClientSummary();
-    updateDashboard();
 
   } catch (error) {
-    console.error(error);
-    message("transactionMessage", "Could not save transaction.");
+    console.error("Transaction save failed:", error);
+    message("transactionMessage", "Save failed: " + error.message);
+
+  } finally {
+    savingTransaction = false;
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Save transaction";
+    }
   }
 });
 
 // LOAD TRANSACTIONS
 async function loadTransactions() {
-  const snapshot = await getDocs(userCollection("transactions"));
+  if (!currentUser || !activeClient) return;
 
-  transactions = snapshot.docs.map(item => ({
-    id: item.id,
-    ...item.data()
-  }));
+  const clientId = activeClient.id;
 
-  transactions.sort((a, b) =>
-    safeText(b.date).localeCompare(safeText(a.date))
+  const ref = collection(
+    db,
+    "users",
+    currentUser.uid,
+    "clients",
+    clientId,
+    "transactions"
   );
+
+  try {
+    const snapshot = await getDocs(ref);
+
+    const transactions = snapshot.docs.map(item => ({
+      id: item.id,
+      ...item.data()
+    }));
+
+    // Avoid rendering data for a different client if the user switched.
+    if (!activeClient || activeClient.id !== clientId) return;
+
+    renderTransactions(transactions);
+
+  } catch (error) {
+    console.error("Loading transactions failed:", error);
+    message("transactionMessage", "Could not load transactions: " + error.message);
+  }
 }
 
 // RENDER TRANSACTIONS
-function renderTransactions() {
-  const tbody = $("transactionsTable");
-  tbody.innerHTML = "";
+function renderTransactions(transactions) {
+  const container = $("transactionsTable");
+  if (!container) return;
 
-  const selected = transactions.filter(
-    item => item.clientId === selectedClientId
+  container.innerHTML = "";
+
+  let income = 0;
+  let expenses = 0;
+
+  transactions.sort((a, b) =>
+    (b.date || "").localeCompare(a.date || "")
   );
 
-  $("transactionsEmpty").classList.toggle(
-    "hidden",
-    selected.length > 0
-  );
+  transactions.forEach(item => {
+    if (item.type === "income") {
+      income += Number(item.amount || 0);
+    } else {
+      expenses += Number(item.amount || 0);
+    }
 
-  selected.forEach(transaction => {
     const row = document.createElement("tr");
 
-    const date = document.createElement("td");
-    date.textContent = safeText(transaction.date);
+    const dateCell = document.createElement("td");
+    dateCell.textContent = item.date || "";
 
-    const type = document.createElement("td");
-    type.textContent = transaction.type;
+    const typeCell = document.createElement("td");
+    typeCell.textContent = item.type || "";
 
-    const description = document.createElement("td");
-    description.textContent = safeText(transaction.description);
+    const descriptionCell = document.createElement("td");
+    descriptionCell.textContent = item.description || "";
 
-    const amount = document.createElement("td");
-    amount.textContent = money(transaction.amount);
+    const amountCell = document.createElement("td");
+    amountCell.textContent = money(item.amount);
 
-    const action = document.createElement("td");
+    const actionCell = document.createElement("td");
     const deleteButton = document.createElement("button");
 
-    deleteButton.className = "delete-transaction";
     deleteButton.textContent = "Delete";
+    deleteButton.className = "danger-btn";
 
-    deleteButton.addEventListener("click", () => {
-      deleteTransaction(transaction.id);
+    deleteButton.addEventListener("click", async () => {
+      if (!confirm("Delete this transaction?")) return;
+
+      try {
+        await deleteDoc(
+          doc(
+            db,
+            "users",
+            currentUser.uid,
+            "clients",
+            activeClient.id,
+            "transactions",
+            item.id
+          )
+        );
+
+        await loadTransactions();
+
+      } catch (error) {
+        alert("Delete failed: " + error.message);
+      }
     });
 
-    action.appendChild(deleteButton);
+    actionCell.appendChild(deleteButton);
 
-    row.append(date, type, description, amount, action);
-    tbody.appendChild(row);
+    row.append(
+      dateCell,
+      typeCell,
+      descriptionCell,
+      amountCell,
+      actionCell
+    );
+
+    container.appendChild(row);
   });
+
+  if ($("clientIncome")) {
+    $("clientIncome").textContent = money(income);
+  }
+
+  if ($("clientExpenses")) {
+    $("clientExpenses").textContent = money(expenses);
+  }
+
+  if ($("clientBalance")) {
+    $("clientBalance").textContent = money(income - expenses);
+  }
+
+  if (activeClient) {
+    activeClient.income = income;
+    activeClient.expenses = expenses;
+  }
+
+  hideElement("transactionsEmpty", transactions.length !== 0);
+  updateDashboard();
 }
 
-// DELETE TRANSACTION
-async function deleteTransaction(transactionId) {
-  if (!confirm("Delete this transaction?")) return;
+// DELETE CLIENT
+$("deleteClientBtn")?.addEventListener("click", async () => {
+  if (!activeClient || !currentUser) return;
+
+  if (!confirm("Delete this client?")) return;
 
   try {
     await deleteDoc(
-      doc(db, "users", currentUser.uid, "transactions", transactionId)
+      doc(db, "users", currentUser.uid, "clients", activeClient.id)
     );
 
-    await loadTransactions();
-    renderTransactions();
-    updateClientSummary();
+    clients = clients.filter(client => client.id !== activeClient.id);
+    activeClient = null;
+
+    showPage("clientsPage");
+    renderClients();
     updateDashboard();
 
+    showAppStatus("Client deleted.");
+
   } catch (error) {
-    console.error(error);
-    alert("Could not delete transaction.");
+    alert("Delete failed: " + error.message);
   }
-}
-
-// CALCULATE CLIENT TOTALS
-function getTotals(clientId) {
-  const records = transactions.filter(
-    item => item.clientId === clientId
-  );
-
-  let income = 0;
-  let expenses = 0;
-
-  records.forEach(item => {
-    const amount = Number(item.amount) || 0;
-
-    if (item.type === "income") {
-      income += amount;
-    } else if (item.type === "expense") {
-      expenses += amount;
-    }
-  });
-
-  return {
-    income,
-    expenses,
-    balance: income - expenses
-  };
-}
-
-// CLIENT SUMMARY
-function updateClientSummary() {
-  if (!selectedClientId) return;
-
-  const totals = getTotals(selectedClientId);
-
-  $("clientIncome").textContent = money(totals.income);
-  $("clientExpenses").textContent = money(totals.expenses);
-  $("clientBalance").textContent = money(totals.balance);
-}
-
-// DASHBOARD SUMMARY
-function updateDashboard() {
-  let income = 0;
-  let expenses = 0;
-
-  clients.forEach(client => {
-    const totals = getTotals(client.id);
-    income += totals.income;
-    expenses += totals.expenses;
-  });
-
-  $("totalClients").textContent = clients.length;
-  $("totalIncome").textContent = money(income);
-  $("totalExpenses").textContent = money(expenses);
-  $("netBalance").textContent = money(income - expenses);
-
-  renderClients();
-}
-
-// CSV EXPORT
-$("exportCsvBtn").addEventListener("click", () => {
-  if (!selectedClientId) return;
-
-  const selected = transactions.filter(
-    item => item.clientId === selectedClientId
-  );
-
-  if (!selected.length) {
-    alert("No transactions to export.");
-    return;
-  }
-
-  const rows = [
-    ["Date", "Type", "Description", "Amount"]
-  ];
-
-  selected.forEach(item => {
-    rows.push([
-      item.date,
-      item.type,
-      item.description,
-      item.amount
-    ]);
-  });
-
-  const csv = rows.map(row =>
-    row.map(value =>
-      `"${String(value ?? "").replace(/"/g, '""')}"`
-    ).join(",")
-  ).join("\n");
-
-  const blob = new Blob(
-    ["\uFEFF" + csv],
-    { type: "text/csv;charset=utf-8;" }
-  );
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = "BuildLedger-transactions.csv";
-  link.click();
-
-  URL.revokeObjectURL(url);
 });
 
-// DEFAULT DATE
-$("transactionDate").value =
-  new Date().toISOString().slice(0, 10);
+// EXPORT CSV
+$("exportCsvBtn")?.addEventListener("click", async () => {
+  if (!activeClient || !currentUser) return;
+
+  try {
+    const ref = collection(
+      db,
+      "users",
+      currentUser.uid,
+      "clients",
+      activeClient.id,
+      "transactions"
+    );
+
+    const snapshot = await getDocs(ref);
+
+    const rows = [
+      ["Date", "Type", "Description", "Amount"],
+      ...snapshot.docs.map(item => {
+        const data = item.data();
+
+        return [
+          data.date,
+          data.type,
+          data.description,
+          data.amount
+        ];
+      })
+    ];
+
+    const csv = rows.map(row =>
+      row.map(value =>
+        '"' + String(value ?? "").replace(/"/g, '""') + '"'
+      ).join(",")
+    ).join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;"
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "transactions.csv";
+    link.click();
+
+    URL.revokeObjectURL(url);
+
+  } catch (error) {
+    alert("Export failed: " + error.message);
+  }
+});

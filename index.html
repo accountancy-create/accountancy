@@ -8,437 +8,205 @@
   <title>BuildLedger | Account Management</title>
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-  <!-- LOGIN AND REGISTRATION -->
   <main id="loginScreen" class="login-screen">
     <section class="login-card">
-
       <div class="brand-mark">BL</div>
-
       <p class="eyebrow">BUILDLEDGER ACCOUNT MANAGEMENT</p>
-
       <h1 id="authTitle">Welcome back</h1>
+      <p class="muted" id="authSubtitle">Sign in to manage your accounts.</p>
 
-      <p class="muted" id="authSubtitle">
-        Sign in to manage your accounts.
-      </p>
-
-      <!-- LOGIN -->
       <form id="loginForm">
-
         <label for="loginUsername">Username</label>
-        <input
-          id="loginUsername"
-          type="text"
-          placeholder="Enter your username"
-          autocomplete="username"
-          required
-        >
+        <input id="loginUsername" type="text" placeholder="Enter your username" autocomplete="username" required>
 
         <label for="loginPassword">Password</label>
-        <input
-          id="loginPassword"
-          type="password"
-          placeholder="Enter your password"
-          autocomplete="current-password"
-          required
-        >
+        <input id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password" required>
 
-        <button class="primary-btn full" type="submit">
-          Sign in →
-        </button>
-
+        <button class="primary-btn full" type="submit">Sign in →</button>
         <p id="loginMessage" class="message"></p>
-
       </form>
 
-      <!-- REGISTER -->
       <form id="registerForm" class="hidden">
-
         <label for="registerUsername">Choose username</label>
-        <input
-          id="registerUsername"
-          type="text"
-          placeholder="Choose a unique username"
-          minlength="3"
-          maxlength="20"
-          pattern="[A-Za-z0-9_]+"
-          autocomplete="username"
-          required
-        >
+        <input id="registerUsername" type="text" placeholder="Choose a unique username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" required>
 
         <label for="registerPassword">Password</label>
-        <input
-          id="registerPassword"
-          type="password"
-          placeholder="Create a password"
-          minlength="8"
-          autocomplete="new-password"
-          required
-        >
+        <input id="registerPassword" type="password" placeholder="Create a password" minlength="8" required>
 
         <label for="confirmPassword">Confirm password</label>
-        <input
-          id="confirmPassword"
-          type="password"
-          placeholder="Enter password again"
-          minlength="8"
-          autocomplete="new-password"
-          required
-        >
+        <input id="confirmPassword" type="password" placeholder="Enter password again" minlength="8" required>
 
-        <button class="primary-btn full" type="submit">
-          Create account →
-        </button>
-
+        <button class="primary-btn full" type="submit">Create account →</button>
         <p id="registerMessage" class="message"></p>
-
       </form>
 
       <p class="auth-switch">
         <span id="authSwitchText">Don't have an account?</span>
-
-        <button
-          type="button"
-          id="switchAuthBtn"
-          class="text-btn"
-        >
-          Create account
-        </button>
+        <button type="button" id="switchAuthBtn" class="text-btn">Create account</button>
       </p>
-
     </section>
   </main>
 
-  <!-- MAIN APPLICATION -->
   <div id="appScreen" class="app-shell hidden">
-
-    <!-- SIDEBAR -->
     <aside class="sidebar">
-
       <div class="brand">
         <div class="brand-mark small">BL</div>
         <strong>BuildLedger</strong>
       </div>
 
-      <button class="nav-item active" id="dashboardNav">
-        Dashboard
-      </button>
-
-      <button class="nav-item" id="clientsNav">
-        Clients
-      </button>
-
-      <button id="logoutBtn" class="logout-btn">
-        Sign out
-      </button>
-
+      <button class="nav-item active" id="dashboardNav">Dashboard</button>
+      <button class="nav-item" id="clientsNav">Clients</button>
+      <button id="logoutBtn" class="logout-btn">Sign out</button>
     </aside>
 
-    <!-- MAIN CONTENT -->
     <main class="main-area">
-
       <header class="topbar">
-
         <p class="eyebrow">ACCOUNTING WORKSPACE</p>
-
         <h1 id="pageTitle">Dashboard</h1>
-
-        <p class="muted">
-          Welcome,
-          <strong id="currentUsername">User</strong>
-        </p>
-
+        <p class="muted">Welcome, <strong id="currentUsername">User</strong></p>
       </header>
 
-      <!-- DASHBOARD -->
       <section id="dashboardPage" class="page">
-
         <div class="welcome-row">
-
           <div>
             <h2>Overview</h2>
             <p class="muted">Your account summary.</p>
           </div>
-
-          <button class="primary-btn" id="addClientTop">
-            + Add client
-          </button>
-
+          <button class="primary-btn" id="addClientTop">+ Add client</button>
         </div>
 
-        <!-- STATISTICS -->
         <div class="stats-grid">
-
-          <article class="stat-card">
-            <p>Total clients</p>
-            <strong id="totalClients">0</strong>
-          </article>
-
-          <article class="stat-card">
-            <p>Total income</p>
-            <strong id="totalIncome">₹0</strong>
-          </article>
-
-          <article class="stat-card">
-            <p>Total expenses</p>
-            <strong id="totalExpenses">₹0</strong>
-          </article>
-
-          <article class="stat-card">
-            <p>Net balance</p>
-            <strong id="netBalance">₹0</strong>
-          </article>
-
+          <article class="stat-card"><p>Total clients</p><strong id="totalClients">0</strong></article>
+          <article class="stat-card"><p>Total income</p><strong id="totalIncome">₹0</strong></article>
+          <article class="stat-card"><p>Total expenses</p><strong id="totalExpenses">₹0</strong></article>
+          <article class="stat-card"><p>Net balance</p><strong id="netBalance">₹0</strong></article>
         </div>
 
         <h2>Recent clients</h2>
-
         <div id="recentClients" class="client-grid"></div>
-
-        <div id="dashboardEmpty" class="empty-state">
-          No clients yet. Add your first client.
-        </div>
-
-        <button class="text-btn" id="viewAllClients">
-          View all clients →
-        </button>
-
+        <div id="dashboardEmpty" class="empty-state">No clients yet. Add your first client.</div>
+        <button class="text-btn" id="viewAllClients">View all clients →</button>
       </section>
 
-      <!-- CLIENTS PAGE -->
       <section id="clientsPage" class="page hidden">
-
         <div class="welcome-row">
-
           <h2>All clients</h2>
-
-          <button class="primary-btn" id="addClientBtn">
-            + Add client
-          </button>
-
+          <button class="primary-btn" id="addClientBtn">+ Add client</button>
         </div>
 
-        <input
-          id="clientSearch"
-          type="search"
-          placeholder="Search clients..."
-        >
-
+        <input id="clientSearch" type="search" placeholder="Search clients...">
         <div id="clientCount" class="muted"></div>
-
         <div id="allClients" class="client-grid"></div>
-
-        <div id="clientsEmpty" class="empty-state">
-          No clients found.
-        </div>
-
+        <div id="clientsEmpty" class="empty-state">No clients found.</div>
       </section>
 
-      <!-- CLIENT ACCOUNT PAGE -->
       <section id="accountPage" class="page hidden">
-
-        <button id="backToClients" class="text-btn">
-          ← Back to clients
-        </button>
+        <button id="backToClients" class="text-btn">← Back to clients</button>
 
         <div class="welcome-row">
-
           <div>
             <h2 id="accountClientName">Client</h2>
             <p id="accountClientDetails" class="muted"></p>
           </div>
-
-          <button id="deleteClientBtn" class="danger-btn">
-            Delete client
-          </button>
-
+          <button id="deleteClientBtn" class="danger-btn">Delete client</button>
         </div>
 
-        <!-- CLIENT STATISTICS -->
         <div class="stats-grid">
-
-          <article class="stat-card">
-            <p>Total income</p>
-            <strong id="clientIncome">₹0</strong>
-          </article>
-
-          <article class="stat-card">
-            <p>Total expenses</p>
-            <strong id="clientExpenses">₹0</strong>
-          </article>
-
-          <article class="stat-card">
-            <p>Balance</p>
-            <strong id="clientBalance">₹0</strong>
-          </article>
-
+          <article class="stat-card"><p>Total income</p><strong id="clientIncome">₹0</strong></article>
+          <article class="stat-card"><p>Total expenses</p><strong id="clientExpenses">₹0</strong></article>
+          <article class="stat-card"><p>Balance</p><strong id="clientBalance">₹0</strong></article>
         </div>
 
-        <div class="transaction-layout">
-
-          <!-- ADD TRANSACTION -->
-          <section class="panel">
-
-            <h3>Add transaction</h3>
-
-            <form id="transactionForm">
-
-              <label for="transactionType">Type</label>
-
-              <select id="transactionType">
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
-              </select>
-
-              <label for="transactionDate">Date</label>
-
-              <input
-                id="transactionDate"
-                type="date"
-                required
-              >
-
-              <label for="transactionDescription">
-                Description
-              </label>
-
-              <input
-                id="transactionDescription"
-                type="text"
-                placeholder="Description"
-                required
-              >
-
-              <label for="transactionAmount">Amount (₹)</label>
-
-              <input
-                id="transactionAmount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Amount"
-                required
-              >
-
-              <button class="primary-btn full" type="submit">
-                Save transaction
-              </button>
-
-              <p id="transactionMessage" class="message"></p>
-
-            </form>
-
-          </section>
-
-          <!-- TRANSACTION HISTORY -->
-          <section class="panel">
-
-            <div class="welcome-row">
-
+        <section class="panel transaction-panel">
+          <div class="transaction-heading">
+            <div>
               <h3>Transactions</h3>
-
-              <button
-                id="exportCsvBtn"
-                class="secondary-btn"
-              >
-                Export CSV
-              </button>
-
+              <p class="muted">Manage this client's transactions.</p>
             </div>
 
-            <div class="table-wrap">
-
-              <table>
-
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-
-                <tbody id="transactionsTable"></tbody>
-
-              </table>
-
+            <div class="export-buttons">
+              <button id="exportCsvBtn" class="secondary-btn">Export CSV</button>
+              <button id="exportPdfBtn" class="primary-btn">Download PDF</button>
             </div>
+          </div>
 
-            <div id="transactionsEmpty" class="empty-state">
-              No transactions yet.
-            </div>
+          <div class="transaction-actions">
+            <button id="addIncomeBtn" class="income-btn">+ Income</button>
+            <button id="addExpenseBtn" class="expense-btn">+ Expense</button>
+          </div>
 
-          </section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th class="money-column">Income</th>
+                  <th class="money-column">Expense</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsTable"></tbody>
+            </table>
+          </div>
 
-        </div>
-
+          <div id="transactionsEmpty" class="empty-state">
+            No transactions yet. Add an income or expense.
+          </div>
+        </section>
       </section>
-
     </main>
-
   </div>
 
-  <!-- ADD CLIENT DIALOG -->
   <dialog id="clientDialog">
-
     <form id="clientForm">
-
       <h2>Add client</h2>
 
       <label for="clientName">Client name</label>
-
-      <input
-        id="clientName"
-        type="text"
-        placeholder="Enter client name"
-        required
-      >
+      <input id="clientName" type="text" placeholder="Enter client name" required>
 
       <label for="clientPhone">Phone number</label>
-
-      <input
-        id="clientPhone"
-        type="tel"
-        placeholder="Enter phone number"
-      >
+      <input id="clientPhone" type="tel" placeholder="Enter phone number">
 
       <label for="clientProject">Project / site</label>
-
-      <input
-        id="clientProject"
-        type="text"
-        placeholder="Enter project name"
-      >
+      <input id="clientProject" type="text" placeholder="Enter project name">
 
       <div class="welcome-row">
-
-        <button
-          type="button"
-          id="cancelDialog"
-          class="secondary-btn"
-        >
-          Cancel
-        </button>
-
-        <button class="primary-btn" type="submit">
-          Save client
-        </button>
-
+        <button type="button" id="cancelDialog" class="secondary-btn">Cancel</button>
+        <button class="primary-btn" type="submit">Save client</button>
       </div>
 
       <p id="clientMessage" class="message"></p>
-
     </form>
-
   </dialog>
 
-  <!-- FIREBASE JAVASCRIPT -->
-  <script type="module" src="script.js"></script>
+  <dialog id="transactionDialog">
+    <form id="transactionForm">
+      <h2 id="transactionDialogTitle">Add income</h2>
 
+      <input id="transactionType" type="hidden" value="income">
+
+      <label for="transactionDate">Date</label>
+      <input id="transactionDate" type="date" required>
+
+      <label for="transactionDescription">Description</label>
+      <input id="transactionDescription" type="text" placeholder="Description" required>
+
+      <label for="transactionAmount">Amount (₹)</label>
+      <input id="transactionAmount" type="number" min="0.01" step="0.01" placeholder="Amount" required>
+
+      <div class="welcome-row">
+        <button type="button" id="cancelTransaction" class="secondary-btn">Cancel</button>
+        <button id="saveTransactionBtn" class="primary-btn" type="submit">Save transaction</button>
+      </div>
+
+      <p id="transactionMessage" class="message"></p>
+    </form>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>

@@ -31,7 +31,6 @@ const firebaseConfig = {
   measurementId: "G-M17HHGNH3C"
 };
 
-// INITIALIZE FIREBASE
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -42,19 +41,15 @@ let clients = [];
 let transactions = [];
 let selectedClientId = null;
 
-// HELPER FUNCTIONS
+// HELPERS
 const $ = (id) => document.getElementById(id);
 
 function usernameToEmail(username) {
-  return username.trim().toLowerCase() +
-    "@users.buildledger.invalid";
+  return username.trim().toLowerCase() + "@users.buildledger.invalid";
 }
 
 function userCollection(name) {
-  if (!currentUser) {
-    throw new Error("Please sign in first.");
-  }
-
+  if (!currentUser) throw new Error("Please sign in first.");
   return collection(db, "users", currentUser.uid, name);
 }
 
@@ -71,10 +66,6 @@ function message(id, text) {
   if (element) element.textContent = text;
 }
 
-function safeText(value) {
-  return String(value ?? "");
-}
-
 function showPage(pageId, title) {
   ["dashboardPage", "clientsPage", "accountPage"].forEach(id => {
     $(id).classList.add("hidden");
@@ -84,7 +75,11 @@ function showPage(pageId, title) {
   $("pageTitle").textContent = title;
 }
 
-// AUTHENTICATION SWITCH
+function safeText(value) {
+  return String(value ?? "");
+}
+
+// AUTH SWITCH
 let showingRegister = false;
 
 $("switchAuthBtn").addEventListener("click", () => {
@@ -119,14 +114,12 @@ $("registerForm").addEventListener("submit", async (event) => {
   const confirm = $("confirmPassword").value;
 
   if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
-    message("registerMessage",
-      "Use 3–20 letters, numbers or underscores.");
+    message("registerMessage", "Use 3–20 letters, numbers or underscores.");
     return;
   }
 
   if (password.length < 8) {
-    message("registerMessage",
-      "Password must be at least 8 characters.");
+    message("registerMessage", "Password must be at least 8 characters.");
     return;
   }
 
@@ -160,7 +153,7 @@ $("registerForm").addEventListener("submit", async (event) => {
     message("registerMessage", "Account created successfully!");
 
   } catch (error) {
-    console.error("Registration error:", error);
+    console.error(error);
 
     message(
       "registerMessage",
@@ -179,8 +172,7 @@ $("loginForm").addEventListener("submit", async (event) => {
   const password = $("loginPassword").value;
 
   if (!username || !password) {
-    message("loginMessage",
-      "Enter your username and password.");
+    message("loginMessage", "Enter your username and password.");
     return;
   }
 
@@ -197,22 +189,17 @@ $("loginForm").addEventListener("submit", async (event) => {
     message("loginMessage", "");
 
   } catch (error) {
-    console.error("Login error:", error);
+    console.error(error);
     message("loginMessage", "Incorrect username or password.");
   }
 });
 
 // LOGOUT
 $("logoutBtn").addEventListener("click", async () => {
-  try {
-    await signOut(auth);
-  } catch (error) {
-    console.error(error);
-    alert("Could not sign out.");
-  }
+  await signOut(auth);
 });
 
-// AUTHENTICATION STATE
+// AUTH STATE
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
 
@@ -226,14 +213,12 @@ onAuthStateChanged(auth, async (user) => {
     try {
       await loadClients();
       await loadTransactions();
-
       showPage("dashboardPage", "Dashboard");
-      setActiveNav("dashboardNav");
       updateDashboard();
 
     } catch (error) {
-      console.error("Loading error:", error);
-      alert("Could not load your data: " + error.message);
+      console.error(error);
+      alert("Could not load your data. Check your Firestore settings.");
     }
 
   } else {
@@ -293,9 +278,13 @@ $("cancelDialog").addEventListener("click", () => {
   $("clientDialog").close();
 });
 
-// SAVE CLIENT
+// SAVE CLIENT - DUPLICATE SAVE FIX
+let savingClient = false;
+
 $("clientForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+
+  if (savingClient) return;
 
   const name = $("clientName").value.trim();
   const phone = $("clientPhone").value.trim();
@@ -307,7 +296,7 @@ $("clientForm").addEventListener("submit", async (event) => {
   }
 
   if (!name) {
-    message("clientMessage", "Please enter the client name.");
+    message("clientMessage", "Enter the client name.");
     return;
   }
 
@@ -315,28 +304,30 @@ $("clientForm").addEventListener("submit", async (event) => {
     'button[type="submit"]'
   );
 
-  try {
-    saveButton.disabled = true;
-    saveButton.textContent = "Saving...";
+  savingClient = true;
+  saveButton.disabled = true;
+  saveButton.textContent = "Saving...";
 
+  // Close popup immediately
+  $("clientDialog").close();
+
+  try {
     await addDoc(userCollection("clients"), {
-      name: name,
-      phone: phone,
-      project: project,
+      name,
+      phone,
+      project,
       createdAt: serverTimestamp()
     });
 
-    // CLOSE POPUP AFTER SUCCESSFUL SAVE
-    $("clientDialog").close();
     $("clientForm").reset();
-    message("clientMessage", "");
 
-    // REFRESH CLIENTS AND DASHBOARD
     await loadClients();
     updateDashboard();
 
   } catch (error) {
     console.error("Client save error:", error);
+
+    $("clientDialog").showModal();
 
     message(
       "clientMessage",
@@ -344,6 +335,7 @@ $("clientForm").addEventListener("submit", async (event) => {
     );
 
   } finally {
+    savingClient = false;
     saveButton.disabled = false;
     saveButton.textContent = "Save client";
   }
@@ -455,14 +447,9 @@ async function openClient(clientId) {
 
   showPage("accountPage", "Client account");
 
-  try {
-    await loadTransactions();
-    renderTransactions();
-    updateClientSummary();
-  } catch (error) {
-    console.error(error);
-    alert("Could not load transactions: " + error.message);
-  }
+  await loadTransactions();
+  renderTransactions();
+  updateClientSummary();
 }
 
 // DELETE CLIENT
@@ -482,14 +469,12 @@ $("deleteClientBtn").addEventListener("click", async () => {
 
     for (const transaction of clientTransactions) {
       await deleteDoc(
-        doc(db, "users", currentUser.uid,
-          "transactions", transaction.id)
+        doc(db, "users", currentUser.uid, "transactions", transaction.id)
       );
     }
 
     await deleteDoc(
-      doc(db, "users", currentUser.uid,
-        "clients", selectedClientId)
+      doc(db, "users", currentUser.uid, "clients", selectedClientId)
     );
 
     selectedClientId = null;
@@ -498,12 +483,11 @@ $("deleteClientBtn").addEventListener("click", async () => {
     await loadTransactions();
 
     showPage("clientsPage", "Clients");
-    setActiveNav("clientsNav");
     updateDashboard();
 
   } catch (error) {
     console.error(error);
-    alert("Could not delete client: " + error.message);
+    alert("Could not delete client.");
   }
 });
 
@@ -518,10 +502,8 @@ $("transactionForm").addEventListener("submit", async (event) => {
   const description = $("transactionDescription").value.trim();
   const amount = Number($("transactionAmount").value);
 
-  if (!date || !description ||
-      !Number.isFinite(amount) || amount <= 0) {
-    message("transactionMessage",
-      "Enter valid transaction details.");
+  if (!date || !description || !Number.isFinite(amount) || amount <= 0) {
+    message("transactionMessage", "Enter valid transaction details.");
     return;
   }
 
@@ -538,18 +520,14 @@ $("transactionForm").addEventListener("submit", async (event) => {
     $("transactionForm").reset();
     message("transactionMessage", "Transaction saved!");
 
-    $("transactionDate").value =
-      new Date().toISOString().slice(0, 10);
-
     await loadTransactions();
     renderTransactions();
     updateClientSummary();
     updateDashboard();
 
   } catch (error) {
-    console.error("Transaction error:", error);
-    message("transactionMessage",
-      "Could not save transaction: " + error.message);
+    console.error(error);
+    message("transactionMessage", "Could not save transaction.");
   }
 });
 
@@ -607,6 +585,7 @@ function renderTransactions() {
     });
 
     action.appendChild(deleteButton);
+
     row.append(date, type, description, amount, action);
     tbody.appendChild(row);
   });
@@ -618,8 +597,7 @@ async function deleteTransaction(transactionId) {
 
   try {
     await deleteDoc(
-      doc(db, "users", currentUser.uid,
-        "transactions", transactionId)
+      doc(db, "users", currentUser.uid, "transactions", transactionId)
     );
 
     await loadTransactions();
@@ -629,7 +607,7 @@ async function deleteTransaction(transactionId) {
 
   } catch (error) {
     console.error(error);
-    alert("Could not delete transaction: " + error.message);
+    alert("Could not delete transaction.");
   }
 }
 
